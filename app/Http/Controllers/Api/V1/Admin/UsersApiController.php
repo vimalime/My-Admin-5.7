@@ -1,0 +1,104 @@
+<?php
+
+namespace App\Http\Controllers\Api\V1\Admin;
+
+use App\Http\Controllers\Controller;
+use App\Http\Controllers\Traits\MediaUploadingTrait;
+use App\Http\Requests\StoreUserRequest;
+use App\Http\Requests\UpdateUserRequest;
+use App\Http\Resources\Admin\UserResource;
+use App\Models\User;
+use Gate;
+use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\Response;
+
+class UsersApiController extends Controller
+{
+    use MediaUploadingTrait;
+
+    public function index()
+    {
+        abort_if(Gate::denies('user_access'), Response::HTTP_FORBIDDEN, '403 Forbidden');
+
+        return new UserResource(User::with(['roles', 'country', 'state', 'city'])->get());
+    }
+
+    public function store(StoreUserRequest $request)
+    {
+        $user = User::create($request->all());
+        $user->roles()->sync($request->input('roles', []));
+        if ($request->input('picture_image', false)) {
+            $user->addMedia(storage_path('tmp/uploads/' . basename($request->input('picture_image'))))->toMediaCollection('picture_image');
+        }
+
+        if ($request->input('gallery_images', false)) {
+            $user->addMedia(storage_path('tmp/uploads/' . basename($request->input('gallery_images'))))->toMediaCollection('gallery_images');
+        }
+
+        if ($request->input('id_proof', false)) {
+            $user->addMedia(storage_path('tmp/uploads/' . basename($request->input('id_proof'))))->toMediaCollection('id_proof');
+        }
+
+        return (new UserResource($user))
+            ->response()
+            ->setStatusCode(Response::HTTP_CREATED);
+    }
+
+    public function show(User $user)
+    {
+        abort_if(Gate::denies('user_show'), Response::HTTP_FORBIDDEN, '403 Forbidden');
+
+        return new UserResource($user->load(['roles', 'country', 'state', 'city']));
+    }
+
+    public function update(UpdateUserRequest $request, User $user)
+    {
+        $user->update($request->all());
+        $user->roles()->sync($request->input('roles', []));
+        if ($request->input('picture_image', false)) {
+            if (!$user->picture_image || $request->input('picture_image') !== $user->picture_image->file_name) {
+                if ($user->picture_image) {
+                    $user->picture_image->delete();
+                }
+                $user->addMedia(storage_path('tmp/uploads/' . basename($request->input('picture_image'))))->toMediaCollection('picture_image');
+            }
+        } elseif ($user->picture_image) {
+            $user->picture_image->delete();
+        }
+
+        if ($request->input('gallery_images', false)) {
+            if (!$user->gallery_images || $request->input('gallery_images') !== $user->gallery_images->file_name) {
+                if ($user->gallery_images) {
+                    $user->gallery_images->delete();
+                }
+                $user->addMedia(storage_path('tmp/uploads/' . basename($request->input('gallery_images'))))->toMediaCollection('gallery_images');
+            }
+        } elseif ($user->gallery_images) {
+            $user->gallery_images->delete();
+        }
+
+        if ($request->input('id_proof', false)) {
+            if (!$user->id_proof || $request->input('id_proof') !== $user->id_proof->file_name) {
+                if ($user->id_proof) {
+                    $user->id_proof->delete();
+                }
+                $user->addMedia(storage_path('tmp/uploads/' . basename($request->input('id_proof'))))->toMediaCollection('id_proof');
+            }
+        } elseif ($user->id_proof) {
+            $user->id_proof->delete();
+        }
+
+        return (new UserResource($user))
+            ->response()
+            ->setStatusCode(Response::HTTP_ACCEPTED);
+    }
+
+    public function destroy(User $user)
+    {
+        abort_if(Gate::denies('user_delete'), Response::HTTP_FORBIDDEN, '403 Forbidden');
+
+        $user->delete();
+
+        return response(null, Response::HTTP_NO_CONTENT);
+    }
+}
